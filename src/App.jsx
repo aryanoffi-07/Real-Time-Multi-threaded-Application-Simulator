@@ -91,10 +91,10 @@ function DashboardView({ state, setModel }) {
   return (
     <>
       <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem'}}>
-        <StatCard title="Ready Threads" value={readyThreads.length} color="var(--accent-blue)" />
-        <StatCard title="Running Threads" value={runningThreads.length} color="var(--accent-green)" />
-        <StatCard title="Blocked Threads" value={blockedThreads.length} color="var(--accent-red)" />
-        <StatCard title="Terminated" value={termThreads.length} color="var(--text-secondary)" />
+        <StatCard title="Ready Threads" value={readyThreads.length} color="var(--accent-blue)" glow="var(--accent-blue-glow)" />
+        <StatCard title="Running Threads" value={runningThreads.length} color="var(--accent-green)" glow="var(--accent-green-glow)" />
+        <StatCard title="Blocked Threads" value={blockedThreads.length} color="var(--accent-red)" glow="var(--accent-red-glow)" />
+        <StatCard title="Terminated" value={termThreads.length} color="var(--text-secondary)" glow="rgba(148, 163, 184, 0.2)" />
       </div>
 
       <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem'}}>
@@ -205,11 +205,26 @@ function DashboardView({ state, setModel }) {
   );
 }
 
-function StatCard({ title, value, color }) {
+function StatCard({ title, value, color, glow }) {
   return (
-    <div className="panel" style={{alignItems: 'center', justifyContent: 'center', padding: '1.5rem'}}>
-      <div style={{color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem'}}>{title}</div>
-      <div style={{fontSize: '2.5rem', fontWeight: 700, color}}>{value}</div>
+    <div className="panel stat-card" style={{
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      padding: '1.5rem',
+      position: 'relative',
+      overflow: 'hidden',
+      borderBottom: `3px solid ${color}`
+    }}>
+      {glow && (
+        <div style={{
+          position: 'absolute', top: 0, right: 0, width: '150px', height: '150px',
+          background: `radial-gradient(circle at top right, ${glow}, transparent 70%)`,
+          opacity: 0.8,
+          pointerEvents: 'none'
+        }}></div>
+      )}
+      <div style={{color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', zIndex: 1}}>{title}</div>
+      <div style={{fontSize: '2.8rem', fontWeight: 700, color, zIndex: 1, textShadow: `0 0 20px ${glow || 'transparent'}`}}>{value}</div>
     </div>
   );
 }
