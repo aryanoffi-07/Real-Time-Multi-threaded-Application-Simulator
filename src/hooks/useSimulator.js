@@ -48,6 +48,9 @@ function simulatorReducer(state, action) {
         requiredResource: needsResource,
         resourceHoldTick: 0, // When it acquires, we track
         quantum: 0,
+        arrivalTime: state.tickCount,
+        turnaroundTime: 0,
+        waitingTime: 0,
       };
       return { ...state, threads: [...state.threads, newThread] };
     }
@@ -62,6 +65,9 @@ function simulatorReducer(state, action) {
         totalWork: 6,
         requiredResource: 'mon1',
         quantum: 0,
+        arrivalTime: state.tickCount,
+        turnaroundTime: 0,
+        waitingTime: 0,
       };
       return { ...state, threads: [...state.threads, newThread] };
     }
@@ -152,12 +158,22 @@ function simulatorReducer(state, action) {
       // In M:1, kernelThreads is 1. Only Core 1 can be used.
       // Other cores remain idle.
 
+      let nextTickCount = state.tickCount + 1;
+      nextThreads = nextThreads.map(t => {
+        if (t.state !== 'TERMINATED') {
+          t.turnaroundTime = nextTickCount - t.arrivalTime;
+        }
+        // Always calculate waiting time since progress updates even on the final terminating tick
+        t.waitingTime = t.turnaroundTime - t.progress;
+        return t;
+      });
+
       return {
         ...state,
         threads: nextThreads,
         cores: nextCores,
         resources: nextResources,
-        tickCount: state.tickCount + 1,
+        tickCount: nextTickCount,
       };
     }
     case 'RESET':

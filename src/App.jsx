@@ -146,7 +146,7 @@ function DashboardView({ state, setModel }) {
           </div>
         </div>
 
-        <div className="panel" style={{maxHeight: '400px', overflowY: 'auto'}}>
+        <div className="panel" style={{ flex: 1 }}>
           <div className="panel-header">
             All Threads
           </div>
@@ -157,8 +157,43 @@ function DashboardView({ state, setModel }) {
           ) : (
             <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
               {state.threads.map(t => (
-                <div key={t.id} style={{display: 'flex', justifyContent: 'space-between', padding: '0.5rem', borderBottom: '1px solid var(--border-color)'}}>
-                  <span>{t.id}</span>
+                <div key={t.id} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--border-color)'}}>
+                  <div>
+                    <span style={{fontWeight: 600}}>{t.id}</span>
+                    <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '1rem', marginTop: '0.4rem'}}>
+                      <div className="time-badge">
+                        ⏱ CPU: {t.progress}/{t.totalWork}
+                        <div className="time-tooltip">
+                          <strong>Burst Time (Execution)</strong><br/><br/>
+                          Completed Ticks: <span style={{color:'var(--accent-blue)'}}>{t.progress}</span><br/>
+                          Total Required: {t.totalWork}<br/><br/>
+                          <em>Displays physical CPU time utilized.</em>
+                        </div>
+                      </div>
+
+                      <div className="time-badge">
+                        ⏳ Wait: {t.waitingTime}
+                        <div className="time-tooltip">
+                          <strong>Waiting Time (Queued)</strong><br/><br/>
+                          Formula: Turnaround - CPU Time<br/>
+                          <span style={{color:'var(--accent-yellow)'}}>{t.turnaroundTime} - {t.progress} = {t.waitingTime} Ticks</span><br/><br/>
+                          <em>Time spent sitting in the READY or BLOCKED queues waiting for resources.</em>
+                        </div>
+                      </div>
+
+                      <div className="time-badge">
+                        🔄 Turnaround: {t.turnaroundTime}
+                        <div className="time-tooltip">
+                          <strong>Turnaround Time (Total Span)</strong><br/><br/>
+                          Formula: {t.state === 'TERMINATED' ? 'Termination Tick' : 'Current Tick'} - Arrival Tick<br/>
+                          <span style={{color:'var(--accent-green)'}}>
+                            {t.state === 'TERMINATED' ? (t.arrivalTime + t.turnaroundTime) : state.tickCount} - {t.arrivalTime} = {t.turnaroundTime} Ticks
+                          </span><br/><br/>
+                          <em>Total lifespan of the thread since it spawned. Freezes when TERMINATED.</em>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <span className={`thread-badge thread-state-${t.state.toLowerCase()}`}>{t.state}</span>
                 </div>
               ))}
