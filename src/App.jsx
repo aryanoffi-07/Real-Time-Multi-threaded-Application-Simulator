@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useSimulator } from './hooks/useSimulator';
-import { Cpu, LayoutDashboard, Layers, Lock, Play, Pause, FastForward, RotateCcw, Plus } from 'lucide-react';
+import { Cpu, LayoutDashboard, Layers, Lock, Play, Pause, RotateCcw, Plus, RefreshCw, AlertOctagon, SkipForward, XCircle } from 'lucide-react';
 
 function App() {
   const simulator = useSimulator();
-  const { state, toggleRun, addThread, setModel, setSpeed, reset } = simulator;
+  const { state, toggleRun, toggleAutoSpawn, setScheduler, addThread, setModel, setSpeed, reset, terminateThread, continueThread, rescheduleThread, dismissAlert } = simulator;
   const [activeTab, setActiveTab] = useState('dashboard');
 
   return (
@@ -54,13 +54,50 @@ function App() {
             <RotateCcw size={16} />
             Reset State
           </button>
+
+          {/* Emergency restart button */}
+          <button
+            className="btn"
+            onClick={reset}
+            title="Emergency Restart — clears all threads and resets the simulation immediately"
+            style={{
+              background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+              color: '#fff',
+              border: '2px solid #ef4444',
+              boxShadow: '0 0 12px rgba(239,68,68,0.5)',
+              fontWeight: 700,
+              letterSpacing: '0.03em',
+              animation: 'pulse-red 2s infinite',
+            }}
+          >
+            <AlertOctagon size={16} />
+            Emergency Restart
+          </button>
           
           <button className="btn btn-success" onClick={addThread}>
             <Plus size={16} />
             Add User Thread
           </button>
 
+          <button 
+            className={`btn ${state.autoSpawn ? 'btn-success' : 'btn-secondary'}`} 
+            onClick={toggleAutoSpawn}
+            style={{marginLeft: '0.5rem'}}
+          >
+            Auto Spawn: {state.autoSpawn ? 'ON' : 'OFF'}
+          </button>
+
           <div style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem'}}>
+            <label style={{fontSize: '0.9rem'}}>Scheduler:</label>
+            <select 
+              value={state.scheduler} 
+              onChange={(e) => setScheduler(e.target.value)}
+              style={{padding: '0.4rem', borderRadius: '4px', background: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)'}}
+            >
+              <option value="ROUND_ROBIN">Round Robin</option>
+              <option value="EDF">Real-Time (EDF)</option>
+            </select>
+
             <label style={{fontSize: '0.9rem'}}>Speed:</label>
             <select 
               value={state.tickSpeed} 
@@ -74,15 +111,142 @@ function App() {
           </div>
         </div>
 
-        {activeTab === 'dashboard' && <DashboardView state={state} />}
+        {activeTab === 'dashboard' && <DashboardView state={state} terminateThread={terminateThread} continueThread={continueThread} rescheduleThread={rescheduleThread} />}
         {activeTab === 'models' && <ModelsView state={state} setModel={setModel} />}
         {activeTab === 'sync' && <SyncView state={state} addMonitorThread={simulator.addMonitorThread} />}
+      </div>
+
+      {/* Deadline Alert Modal */}
+      {state.deadlineAlerts.length > 0 && (
+        <DeadlineAlertModal
+          threadId={state.deadlineAlerts[0]}
+          thread={state.threads.find(t => t.id === state.deadlineAlerts[0])}
+          tickCount={state.tickCount}
+          onTerminate={() => { terminateThread(state.deadlineAlerts[0]); dismissAlert(state.deadlineAlerts[0]); }}
+          onContinue={() => { continueThread(state.deadlineAlerts[0]); dismissAlert(state.deadlineAlerts[0]); }}
+          onReschedule={() => { rescheduleThread(state.deadlineAlerts[0]); dismissAlert(state.deadlineAlerts[0]); }}
+          onDismiss={() => dismissAlert(state.deadlineAlerts[0])}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeadlineAlertModal({ threadId, thread, tickCount, onTerminate, onContinue, onReschedule, onDismiss }) {
+  if (!thread) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.75)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #1a1f2e, #0f121b)',
+        border: '2px solid #ef4444',
+        borderRadius: '16px',
+        padding: '2.5rem',
+        maxWidth: '480px',
+        width: '90%',
+        boxShadow: '0 0 60px rgba(239,68,68,0.4), 0 24px 60px rgba(0,0,0,0.8)',
+        animation: 'slideIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          <AlertOctagon size={28} color="#ef4444" style={{ flexShrink: 0, animation: 'pulse-icon 1.2s infinite' }} />
+          <div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ef4444', letterSpacing: '-0.02em' }}>
+              ⚠ Deadline Missed!
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '2px' }}>
+              Simulation paused — your decision is required
+            </div>
+          </div>
+        </div>
+
+        {/* Thread Info */}
+        <div style={{
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: '10px',
+          padding: '1rem',
+          marginBottom: '1.5rem',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '0.6rem',
+        }}>
+          {[
+            ['Thread', `${thread.name} (${threadId})`],
+            ['State',  thread.state],
+            ['Deadline Tick', thread.deadline],
+            ['Current Tick',  tickCount],
+            ['Progress', `${thread.progress} / ${thread.totalWork}`],
+            ['Overdue By', `${tickCount - thread.deadline} tick(s)`],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0', marginTop: '2px' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Choose an action:</div>
+
+          <button onClick={onContinue} style={{
+            padding: '0.75rem 1.2rem', borderRadius: '10px', border: '1px solid #3b82f6',
+            background: 'rgba(59,130,246,0.12)', color: '#3b82f6',
+            fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.95rem',
+            transition: 'all 0.2s',
+          }}>
+            <SkipForward size={16} />
+            <div>
+              <div>Continue (Force-Unblock)</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.8 }}>Remove from resource queue → push back to READY</div>
+            </div>
+          </button>
+
+          <button onClick={onReschedule} style={{
+            padding: '0.75rem 1.2rem', borderRadius: '10px', border: '1px solid #f59e0b',
+            background: 'rgba(245,158,11,0.12)', color: '#f59e0b',
+            fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.95rem',
+            transition: 'all 0.2s',
+          }}>
+            <RefreshCw size={16} />
+            <div>
+              <div>Reschedule</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.8 }}>Reset progress + assign a fresh deadline → back to READY</div>
+            </div>
+          </button>
+
+          <button onClick={onTerminate} style={{
+            padding: '0.75rem 1.2rem', borderRadius: '10px', border: '1px solid #ef4444',
+            background: 'rgba(239,68,68,0.12)', color: '#ef4444',
+            fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.95rem',
+            transition: 'all 0.2s',
+          }}>
+            <XCircle size={16} />
+            <div>
+              <div>Terminate</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.8 }}>Force-kill the thread, free resources, move on</div>
+            </div>
+          </button>
+
+          <button onClick={onDismiss} style={{
+            marginTop: '0.4rem', padding: '0.5rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)',
+            background: 'transparent', color: '#64748b',
+            fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem', transition: 'all 0.2s',
+          }}>
+            Dismiss (keep thread as-is and resume)
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function DashboardView({ state, setModel }) {
+function DashboardView({ state, terminateThread, continueThread, rescheduleThread }) {
   const readyThreads = state.threads.filter(t => t.state === 'READY');
   const runningThreads = state.threads.filter(t => t.state === 'RUNNING');
   const blockedThreads = state.threads.filter(t => t.state === 'BLOCKED');
@@ -192,9 +356,67 @@ function DashboardView({ state, setModel }) {
                           <em>Total lifespan of the thread since it spawned. Freezes when TERMINATED.</em>
                         </div>
                       </div>
+
+                      <div className="time-badge" style={{color: t.missedDeadline ? 'var(--accent-red)' : 'inherit', border: t.missedDeadline ? '1px solid var(--accent-red)' : undefined}}>
+                        ⏰ Deadline: {t.deadline} {t.missedDeadline && ' (MISSED)'}
+                        <div className="time-tooltip">
+                          <strong>Execution Deadline</strong><br/><br/>
+                          The tick count by which this thread must terminate to meet real-time constraints.<br/><br/>
+                          <em>If Current Tick &gt; Deadline and the thread is not TERMINATED, it misses its deadline.</em>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <span className={`thread-badge thread-state-${t.state.toLowerCase()}`}>{t.state}</span>
+
+                  {/* Per-thread action buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end', marginLeft: '0.5rem' }}>
+                    <span className={`thread-badge thread-state-${t.state.toLowerCase()}`}>{t.state}</span>
+                    {t.state !== 'TERMINATED' && (
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        {/* Continue: only useful when BLOCKED */}
+                        {t.state === 'BLOCKED' && (
+                          <button
+                            onClick={() => continueThread(t.id)}
+                            title="Force-unblock this thread and push it back to READY"
+                            style={{
+                              padding: '0.2rem 0.5rem', fontSize: '0.7rem', borderRadius: '4px',
+                              background: 'rgba(56,189,248,0.15)', color: 'var(--accent-blue)',
+                              border: '1px solid var(--accent-blue)', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: '0.2rem'
+                            }}
+                          >
+                            <SkipForward size={11} /> Continue
+                          </button>
+                        )}
+                        {/* Reschedule */}
+                        <button
+                          onClick={() => rescheduleThread(t.id)}
+                          title="Reschedule: reset this thread with fresh work and a new deadline"
+                          style={{
+                            padding: '0.2rem 0.5rem', fontSize: '0.7rem', borderRadius: '4px',
+                            background: 'rgba(250,204,21,0.15)', color: 'var(--accent-yellow)',
+                            border: '1px solid var(--accent-yellow)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.2rem'
+                          }}
+                        >
+                          <RefreshCw size={11} /> Reschedule
+                        </button>
+                        {/* Terminate */}
+                        <button
+                          onClick={() => terminateThread(t.id)}
+                          title="Force-terminate this thread immediately"
+                          style={{
+                            padding: '0.2rem 0.5rem', fontSize: '0.7rem', borderRadius: '4px',
+                            background: 'rgba(239,68,68,0.15)', color: 'var(--accent-red)',
+                            border: '1px solid var(--accent-red)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.2rem'
+                          }}
+                        >
+                          <XCircle size={11} /> Terminate
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

@@ -315,6 +315,17 @@ h1, h2, h3, h4, h5, h6 {
   100% { opacity: 1; }
 }
 
+@keyframes pulse-red {
+  0%   { box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+  50%  { box-shadow: 0 0 22px rgba(239,68,68,0.9), 0 0 40px rgba(239,68,68,0.3); }
+  100% { box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: scale(0.85) translateY(-20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 /* Glowing Progress Bar */
 .progress-bar-container {
   width: 100%;
